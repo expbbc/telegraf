@@ -311,6 +311,11 @@ func Errorf(err error, msg string, format ...interface{}) error {
 	}
 }
 
+// EOF represents the end of a stream of an SNMP walk
+type EOF struct{}
+
+func (EOF) Error() string { return "end of stream" }
+
 func init() {
 	inputs.Add("snmp", func() telegraf.Input {
 		return &Snmp{
@@ -442,7 +447,7 @@ func (t Table) Build(gs snmpConnection, walk bool) (*RTable, error) {
 		} else {
 			err := gs.Walk(oid, func(ent gosnmp.SnmpPDU) error {
 				if len(ent.Name) <= len(oid) || ent.Name[:len(oid)+1] != oid+"." {
-					return NestedError{} // break the walk
+					return EOF{} // break the walk
 				}
 
 				idx := ent.Name[len(oid):]
@@ -462,7 +467,8 @@ func (t Table) Build(gs snmpConnection, walk bool) (*RTable, error) {
 				return nil
 			})
 			if err != nil {
-				if _, ok := err.(NestedError); !ok {
+				if _, ok := err.(EOF); !ok {
+					// an error which was not EOF. return it
 					return nil, Errorf(err, "performing bulk walk for field %s", f.Name)
 				}
 			}
